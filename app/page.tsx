@@ -98,19 +98,32 @@ export default function Home() {
   // ─── Razorpay + Salesforce Checkout Flow ───────────────────────────────────
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+
+    const parsedAmount = Number(amount);
+    
+    // Strict amount validation before proceeding
+    if (!amount || isNaN(parsedAmount) || parsedAmount <= 0) {
+      setStatus('error');
+      setErrorMessage("Please enter a valid donation amount.");
+      return;
+    }
+
     setStatus('loading');
 
     const sessionId = getOrCreateSessionId();
 
     // Event 4: Fire before the payment/donation API call
-    logWebsiteActivity('Donation Submitted', 'Processing', email, Number(amount));
+    logWebsiteActivity('Donation Submitted', 'Processing', email, parsedAmount);
 
     try {
+      const orderPayload = { amount: parsedAmount };
+      console.log("Sending Razorpay payload:", orderPayload);
+
       // 1. Create Razorpay Order on Backend
       const orderRes = await fetch('/api/razorpay/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: Number(amount) })
+        body: JSON.stringify(orderPayload)
       });
       const orderData = await orderRes.json();
       
@@ -121,7 +134,7 @@ export default function Home() {
       // 2. Open Razorpay Checkout Popup
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
-        amount: Math.round(Number(amount) * 100),
+        amount: Math.round(parsedAmount * 100),
         currency: "USD",
         name: "America India Foundation",
         description: "Donation",
@@ -135,7 +148,7 @@ export default function Home() {
               lastName,
               email,
               phone,
-              amount: Number(amount),
+              amount: parsedAmount,
               sessionId,
             };
 
