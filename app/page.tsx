@@ -3,7 +3,6 @@
 import { useState, FormEvent, useEffect, useRef, useCallback } from 'react';
 
 // ─── Session Management ────────────────────────────────────────────────────────
-// Generate a unique session ID on first visit and reuse it on every page refresh
 function getOrCreateSessionId(): string {
   const key = 'aif_session_id';
   let sessionId = localStorage.getItem(key);
@@ -15,9 +14,6 @@ function getOrCreateSessionId(): string {
 }
 
 // ─── Website Activity Tracker ──────────────────────────────────────────────────
-// Reusable function to log a visitor journey event.
-// Routes through our Next.js backend (/api/activity) which handles OAuth +
-// Salesforce call — this avoids browser CORS restrictions.
 async function logWebsiteActivity(
   eventName: string,
   status: string,
@@ -36,7 +32,6 @@ async function logWebsiteActivity(
     if (email) body.email = email;
     if (donationAmount !== null) body.donationAmount = donationAmount;
 
-    // Fire-and-forget: do not await so tracking never blocks the UI
     fetch('/api/activity', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -47,7 +42,6 @@ async function logWebsiteActivity(
     console.warn('Activity tracking error:', err);
   }
 }
-// ──────────────────────────────────────────────────────────────────────────────
 
 export default function Home() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -60,26 +54,21 @@ export default function Home() {
   const [phone, setPhone] = useState('');
   const [amount, setAmount] = useState('');
 
-  // Response state
   const [sfRecords, setSfRecords] = useState({
     accountId: '',
     giftCommitmentId: '',
     giftTransactionId: ''
   });
 
-  // ─── Tracking Refs (fire-once guards) ─────────────────────────────────────
+  // ─── Tracking Refs ─────────────────────────────────────────────────────────
   const donationSectionViewedFired = useRef(false);
   const donationStartedFired = useRef(false);
   const donationSectionRef = useRef<HTMLElement>(null);
 
-  // ─── Event 1: Page Viewed ─────────────────────────────────────────────────
-  // Fire once automatically when the page first loads. Status = Anonymous
   useEffect(() => {
     logWebsiteActivity('Page Viewed', 'Anonymous');
   }, []);
 
-  // ─── Event 2: Donation Section Viewed ─────────────────────────────────────
-  // Fire once when the donation form first enters the user's viewport. Status = Interested
   useEffect(() => {
     const sectionEl = donationSectionRef.current;
     if (!sectionEl) return;
@@ -99,8 +88,6 @@ export default function Home() {
     return () => observer.disconnect();
   }, []);
 
-  // ─── Event 3: Donation Started ────────────────────────────────────────────
-  // Fire once when the visitor first focuses on any donation form field. Status = Interested
   const handleFormFocus = useCallback(() => {
     if (!donationStartedFired.current) {
       donationStartedFired.current = true;
@@ -108,57 +95,108 @@ export default function Home() {
     }
   }, []);
 
-  // ─── Event 4: Donation Submitted ─────────────────────────────────────────
-  // Fire immediately before calling the existing Salesforce donation API. Status = Processing
-  // NOTE: "Donation Completed" is NOT fired here — the Apex Donation REST API
-  // already creates that Website Activity record server-side.
+  // ─── Razorpay + Salesforce Checkout Flow ───────────────────────────────────
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setStatus('loading');
 
     const sessionId = getOrCreateSessionId();
 
-    // Event 4: Fire before the donation API call
+    // Event 4: Fire before the payment/donation API call
     logWebsiteActivity('Donation Submitted', 'Processing', email, Number(amount));
 
     try {
-      // Include sessionId in the donation payload so Apex can link all records
-      const payload = {
-        firstName,
-        lastName,
-        email,
-        phone,
-        amount: Number(amount),
-        sessionId,
-      };
-
-      const response = await fetch('/api/donate', {
+      // 1. Create Razorpay Order on Backend
+      const orderRes = await fetch('/api/razorpay/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ amount: Number(amount) })
       });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        setStatus('success');
-        
-        // Auto-redirect back to home (reset form and scroll to top) after 4 seconds
-        setTimeout(() => {
-          resetForm();
-          setFirstName('');
-          setLastName('');
-          setEmail('');
-          setPhone('');
-          setAmount('');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }, 4000);
-
-      } else {
-        throw new Error(data.message || "Unable to process donation. Please try again.");
+      const orderData = await orderRes.json();
+      
+      if (!orderRes.ok || !orderData.success) {
+        throw new Error(orderData.message || "Failed to initialize payment gateway.");
       }
+
+      // 2. Open Razorpay Checkout Popup
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        amount: Math.round(Number(amount) * 100),
+        currency: "USD",
+        name: "America India Foundation",
+        description: "Donation",
+        order_id: orderData.orderId,
+        handler: async function (response: any) {
+          // PAYMENT SUCCESSFUL -> Call Salesforce
+          setStatus('loading'); // Show loading again while calling SF
+          try {
+            const payload = {
+              firstName,
+              lastName,
+              email,
+              phone,
+              amount: Number(amount),
+              sessionId,
+            };
+
+            const sfResponse = await fetch('/api/donate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+
+            const data = await sfResponse.json();
+
+            if (sfResponse.ok && data.success) {
+              setStatus('success');
+              
+              // Auto-redirect back to home
+              setTimeout(() => {
+                resetForm();
+                setFirstName('');
+                setLastName('');
+                setEmail('');
+                setPhone('');
+                setAmount('');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }, 4000);
+            } else {
+              throw new Error("Payment was successful, but we failed to record it in our system.");
+            }
+          } catch (error: any) {
+             console.error("Salesforce Error after payment:", error);
+             setStatus('error');
+             setErrorMessage("Payment was successful, but we failed to record it in our system.");
+          }
+        },
+        prefill: {
+          name: `${firstName} ${lastName}`,
+          email: email,
+          contact: phone
+        },
+        theme: {
+          color: "var(--primary-blue)"
+        },
+        modal: {
+          ondismiss: function() {
+            // PAYMENT CANCELLED -> Do not call SF
+            setStatus('error');
+            setErrorMessage("Payment was cancelled or failed.");
+          }
+        }
+      };
+      
+      const rzp = new (window as any).Razorpay(options);
+      
+      rzp.on('payment.failed', function (response: any) {
+         setStatus('error');
+         setErrorMessage("Payment was cancelled or failed.");
+      });
+      
+      rzp.open();
+
     } catch (error: any) {
-      console.error("Donation Error:", error);
+      console.error("Checkout Error:", error);
       setStatus('error');
       setErrorMessage(error.message || "Unable to process donation. Please try again.");
     }
@@ -176,8 +214,6 @@ export default function Home() {
         <nav>
           <ul>
             <li><a href="#">Our Mission</a></li>
-            {/* <li><a href="#">Programs</a></li> */}
-            {/* <li><a href="#">Impact</a></li> */}
             <li><a href="#donate" style={{ color: 'var(--primary-green)', fontWeight: 600 }}>Donate</a></li>
           </ul>
         </nav>
@@ -203,14 +239,12 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ref used to detect when this section enters the viewport */}
       <section id="donate" className="donation-section" ref={donationSectionRef}>
         
         {/* Form Container */}
         {(status === 'idle' || status === 'loading') && (
           <div className="donation-card" id="donationFormContainer">
             <h2>Make Your Contribution Today</h2>
-            {/* onFocus on the <form> captures the first interaction on any child field */}
             <form id="donationForm" onSubmit={handleSubmit} onFocus={handleFormFocus}>
               <div className="form-group">
                 <label htmlFor="firstName">First Name *</label>
