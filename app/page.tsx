@@ -3,7 +3,7 @@
 import { useState, FormEvent, useEffect, useRef, useCallback } from 'react';
 
 // ─── Session Management ────────────────────────────────────────────────────────
-// Generate a unique session ID once per browser session, persisted in localStorage
+// Generate a unique session ID on first visit and reuse it on every page refresh
 function getOrCreateSessionId(): string {
   const key = 'aif_session_id';
   let sessionId = localStorage.getItem(key);
@@ -14,8 +14,10 @@ function getOrCreateSessionId(): string {
   return sessionId;
 }
 
-// ─── Website Activity Tracker ─────────────────────────────────────────────────
-// Reusable function to log a visitor journey event to Salesforce via our backend
+// ─── Website Activity Tracker ──────────────────────────────────────────────────
+// Reusable function to log a visitor journey event.
+// Routes through our Next.js backend (/api/activity) which handles OAuth +
+// Salesforce call — this avoids browser CORS restrictions.
 async function logWebsiteActivity(
   eventName: string,
   status: string,
@@ -24,22 +26,23 @@ async function logWebsiteActivity(
 ): Promise<void> {
   try {
     const sessionId = getOrCreateSessionId();
-    const payload: Record<string, unknown> = {
+
+    const body: Record<string, unknown> = {
       sessionId,
-      pageUrl: window.location.href,
-      timestamp: new Date().toISOString(),
       eventName,
       status,
+      pageUrl: window.location.href,
     };
-    if (email) payload.visitorEmail = email;
-    if (donationAmount !== null) payload.donationAmount = donationAmount;
+    if (email) body.email = email;
+    if (donationAmount !== null) body.donationAmount = donationAmount;
 
     // Fire-and-forget: do not await so tracking never blocks the UI
     fetch('/api/activity', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     }).catch((err) => console.warn('Activity tracking failed silently:', err));
+
   } catch (err) {
     console.warn('Activity tracking error:', err);
   }
@@ -70,13 +73,13 @@ export default function Home() {
   const donationSectionRef = useRef<HTMLElement>(null);
 
   // ─── Event 1: Page Viewed ─────────────────────────────────────────────────
-  // Fire once automatically when the page first loads
+  // Fire once automatically when the page first loads. Status = Anonymous
   useEffect(() => {
     logWebsiteActivity('Page Viewed', 'Anonymous');
   }, []);
 
-  // ─── Event 2: Donation Section Viewed ────────────────────────────────────
-  // Fire once when the donation form first scrolls into the user's viewport
+  // ─── Event 2: Donation Section Viewed ─────────────────────────────────────
+  // Fire once when the donation form first enters the user's viewport. Status = Interested
   useEffect(() => {
     const sectionEl = donationSectionRef.current;
     if (!sectionEl) return;
@@ -97,7 +100,7 @@ export default function Home() {
   }, []);
 
   // ─── Event 3: Donation Started ────────────────────────────────────────────
-  // Fire once when the visitor first focuses on any form field
+  // Fire once when the visitor first focuses on any donation form field. Status = Interested
   const handleFormFocus = useCallback(() => {
     if (!donationStartedFired.current) {
       donationStartedFired.current = true;
@@ -105,21 +108,28 @@ export default function Home() {
     }
   }, []);
 
-  // ─── Events 4 & 5: Donation Submitted & Donation Completed ───────────────
+  // ─── Event 4: Donation Submitted ─────────────────────────────────────────
+  // Fire immediately before calling the existing Salesforce donation API. Status = Processing
+  // NOTE: "Donation Completed" is NOT fired here — the Apex Donation REST API
+  // already creates that Website Activity record server-side.
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setStatus('loading');
 
-    // Event 4: Fire immediately before calling the donation API
+    const sessionId = getOrCreateSessionId();
+
+    // Event 4: Fire before the donation API call
     logWebsiteActivity('Donation Submitted', 'Processing', email, Number(amount));
 
     try {
+      // Include sessionId in the donation payload so Apex can link all records
       const payload = {
         firstName,
         lastName,
         email,
         phone,
-        amount: Number(amount)
+        amount: Number(amount),
+        sessionId,
       };
 
       const response = await fetch('/api/donate', {
@@ -131,9 +141,6 @@ export default function Home() {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        // Event 5: Fire only after the donation API returns success
-        logWebsiteActivity('Donation Completed', 'Completed', email, Number(amount));
-
         setStatus('success');
         setSfRecords({
           accountId: data.accountId || 'N/A',
@@ -189,14 +196,14 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ref attached to track when donation section enters viewport */}
+      {/* ref used to detect when this section enters the viewport */}
       <section id="donate" className="donation-section" ref={donationSectionRef}>
         
         {/* Form Container */}
         {(status === 'idle' || status === 'loading') && (
           <div className="donation-card" id="donationFormContainer">
             <h2>Make Your Contribution Today</h2>
-            {/* onFocus on the form captures the first interaction on any field */}
+            {/* onFocus on the <form> captures the first interaction on any child field */}
             <form id="donationForm" onSubmit={handleSubmit} onFocus={handleFormFocus}>
               <div className="form-group">
                 <label htmlFor="firstName">First Name *</label>
