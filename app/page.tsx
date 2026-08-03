@@ -133,7 +133,7 @@ export default function Home() {
 
       // 2. Open Razorpay Checkout Popup
       const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        key: orderData.keyId,
         amount: Math.round(parsedAmount * 100),
         currency: "USD",
         name: "America India Foundation",

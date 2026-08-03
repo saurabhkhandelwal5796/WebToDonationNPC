@@ -25,7 +25,7 @@ export async function POST(request: Request) {
             receipt: 'receipt_' + Date.now()
         });
 
-        return NextResponse.json({ success: true, orderId: order.id });
+        return NextResponse.json({ success: true, orderId: order.id, keyId: key_id });
     } catch (error) {
         console.error("Razorpay Order Creation Error:", error);
         return NextResponse.json({ success: false, message: "Could not create payment order" }, { status: 500 });
