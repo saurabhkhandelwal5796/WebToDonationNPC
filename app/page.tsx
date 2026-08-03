@@ -135,7 +135,7 @@ export default function Home() {
       const options = {
         key: orderData.keyId,
         amount: Math.round(parsedAmount * 100),
-        currency: "USD",
+        currency: "INR",
         name: "America India Foundation",
         description: "Donation",
         order_id: orderData.orderId,

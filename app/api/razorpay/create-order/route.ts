@@ -21,7 +21,7 @@ export async function POST(request: Request) {
         // Amount is in smallest currency unit (cents). Using USD as per the form design.
         const order = await razorpay.orders.create({
             amount: Math.round(amount * 100),
-            currency: 'USD',
+            currency: 'INR',
             receipt: 'receipt_' + Date.now()
         });
 
