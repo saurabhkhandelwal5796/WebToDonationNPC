@@ -142,11 +142,18 @@ export default function Home() {
 
       if (response.ok && data.success) {
         setStatus('success');
-        setSfRecords({
-          accountId: data.accountId || 'N/A',
-          giftCommitmentId: data.giftCommitmentId || 'N/A',
-          giftTransactionId: data.giftTransactionId || 'N/A'
-        });
+        
+        // Auto-redirect back to home (reset form and scroll to top) after 4 seconds
+        setTimeout(() => {
+          resetForm();
+          setFirstName('');
+          setLastName('');
+          setEmail('');
+          setPhone('');
+          setAmount('');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }, 4000);
+
       } else {
         throw new Error(data.message || "Unable to process donation. Please try again.");
       }
@@ -286,13 +293,7 @@ export default function Home() {
         {status === 'success' && (
           <div className="donation-card message-box success-box" id="successContainer" style={{ display: 'block' }}>
             <h2>Thank You For Making A Difference!</h2>
-            <p>Donation successfully recorded.</p>
-            <div className="record-details">
-              <p><strong>Salesforce Records Created:</strong></p>
-              <p>Person Account: <span id="resAccountId">{sfRecords.accountId}</span></p>
-              <p>Gift Commitment: <span id="resGiftCommitmentId">{sfRecords.giftCommitmentId}</span></p>
-              <p>Gift Transaction: <span id="resGiftTransactionId">{sfRecords.giftTransactionId}</span></p>
-            </div>
+            <p>Your donation has been successfully recorded. We are redirecting you back to the home page...</p>
           </div>
         )}
 
