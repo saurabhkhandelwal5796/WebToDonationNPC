@@ -100,7 +100,7 @@ export default function Home() {
     e.preventDefault();
 
     const parsedAmount = Number(amount);
-    
+
     // Strict amount validation before proceeding
     if (!amount || isNaN(parsedAmount) || parsedAmount <= 0) {
       setStatus('error');
@@ -126,7 +126,7 @@ export default function Home() {
         body: JSON.stringify(orderPayload)
       });
       const orderData = await orderRes.json();
-      
+
       if (!orderRes.ok || !orderData.success) {
         throw new Error(orderData.message || "Failed to initialize payment gateway.");
       }
@@ -136,7 +136,7 @@ export default function Home() {
         key: orderData.keyId,
         amount: Math.round(parsedAmount * 100),
         currency: "INR",
-        name: "America India Foundation",
+        name: "Global Unity Initiative",
         description: "Donation",
         order_id: orderData.orderId,
         handler: async function (response: any) {
@@ -162,7 +162,7 @@ export default function Home() {
 
             if (sfResponse.ok && data.success) {
               setStatus('success');
-              
+
               // Auto-redirect back to home
               setTimeout(() => {
                 resetForm();
@@ -177,9 +177,9 @@ export default function Home() {
               throw new Error("Payment was successful, but we failed to record it in our system.");
             }
           } catch (error: any) {
-             console.error("Salesforce Error after payment:", error);
-             setStatus('error');
-             setErrorMessage("Payment was successful, but we failed to record it in our system.");
+            console.error("Salesforce Error after payment:", error);
+            setStatus('error');
+            setErrorMessage("Payment was successful, but we failed to record it in our system.");
           }
         },
         prefill: {
@@ -191,21 +191,21 @@ export default function Home() {
           color: "var(--primary-blue)"
         },
         modal: {
-          ondismiss: function() {
+          ondismiss: function () {
             // PAYMENT CANCELLED -> Do not call SF
             setStatus('error');
             setErrorMessage("Payment was cancelled or failed.");
           }
         }
       };
-      
+
       const rzp = new (window as any).Razorpay(options);
-      
+
       rzp.on('payment.failed', function (response: any) {
-         setStatus('error');
-         setErrorMessage("Payment was cancelled or failed.");
+        setStatus('error');
+        setErrorMessage("Payment was cancelled or failed.");
       });
-      
+
       rzp.open();
 
     } catch (error: any) {
@@ -223,7 +223,7 @@ export default function Home() {
   return (
     <>
       <header>
-        <a href="#" className="logo">America India Foundation</a>
+        <a href="#" className="logo">Global Unity Initiative</a>
         <nav>
           <ul>
             <li><a href="#">Our Mission</a></li>
@@ -235,7 +235,7 @@ export default function Home() {
       <section className="hero">
         <h1>Together, We Can Create Lasting Impact</h1>
         <p>Support programs that empower communities through education, healthcare, and sustainable livelihoods.</p>
-        
+
         <div className="impact-container">
           <div className="impact-card">
             <h3>Education</h3>
@@ -253,7 +253,7 @@ export default function Home() {
       </section>
 
       <section id="donate" className="donation-section" ref={donationSectionRef}>
-        
+
         {/* Form Container */}
         {(status === 'idle' || status === 'loading') && (
           <div className="donation-card" id="donationFormContainer">
@@ -261,11 +261,11 @@ export default function Home() {
             <form id="donationForm" onSubmit={handleSubmit} onFocus={handleFormFocus}>
               <div className="form-group">
                 <label htmlFor="firstName">First Name *</label>
-                <input 
-                  type="text" 
-                  id="firstName" 
-                  className="form-control" 
-                  required 
+                <input
+                  type="text"
+                  id="firstName"
+                  className="form-control"
+                  required
                   placeholder="First Name"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
@@ -273,11 +273,11 @@ export default function Home() {
               </div>
               <div className="form-group">
                 <label htmlFor="lastName">Last Name *</label>
-                <input 
-                  type="text" 
-                  id="lastName" 
-                  className="form-control" 
-                  required 
+                <input
+                  type="text"
+                  id="lastName"
+                  className="form-control"
+                  required
                   placeholder="Last Name"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
@@ -285,11 +285,11 @@ export default function Home() {
               </div>
               <div className="form-group">
                 <label htmlFor="email">Email *</label>
-                <input 
-                  type="email" 
-                  id="email" 
-                  className="form-control" 
-                  required 
+                <input
+                  type="email"
+                  id="email"
+                  className="form-control"
+                  required
                   placeholder="email@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -297,11 +297,11 @@ export default function Home() {
               </div>
               <div className="form-group">
                 <label htmlFor="phone">Phone Number *</label>
-                <input 
-                  type="tel" 
-                  id="phone" 
-                  className="form-control" 
-                  required 
+                <input
+                  type="tel"
+                  id="phone"
+                  className="form-control"
+                  required
                   placeholder="Phone Number"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
@@ -311,22 +311,22 @@ export default function Home() {
                 <label htmlFor="amount">Donation Amount *</label>
                 <div className="amount-input-wrapper">
                   <span>$</span>
-                  <input 
-                    type="number" 
-                    id="amount" 
-                    className="form-control" 
-                    required 
-                    min="1" 
-                    step="any" 
+                  <input
+                    type="number"
+                    id="amount"
+                    className="form-control"
+                    required
+                    min="1"
+                    step="any"
                     placeholder="Amount"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                   />
                 </div>
               </div>
-              <button 
-                type="submit" 
-                id="submitBtn" 
+              <button
+                type="submit"
+                id="submitBtn"
                 className="btn-donate"
                 disabled={status === 'loading'}
               >

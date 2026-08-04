@@ -8,7 +8,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "America India Foundation - Donation Portal",
+  title: "Global Unity Initiative - Donation Portal",
   description: "A premium nonprofit donation experience",
 };
 
